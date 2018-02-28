@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 import tempfile
 
@@ -87,7 +86,8 @@ class MountsTempDir(object):
             return
         print('Removing temporary directory {}'.format(self.temp_dir))
         if self.data_dir:
-            shutil.rmtree(self.data_dir)
+            subprocess.check_call(['rm', '-rvf', '--one-file-system',
+                                   self.data_dir])
         os.rmdir(self.temp_dir)
 
     def _cleanup_mounts(self):

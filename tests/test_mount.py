@@ -42,12 +42,6 @@ def mock_rmdir():
 
 
 @pytest.fixture
-def mock_rmtree():
-    with mock.patch('shutil.rmtree') as patched_object:
-        yield patched_object
-
-
-@pytest.fixture
 def mock_call():
     with mock.patch('subprocess.check_call') as patched_object:
         yield patched_object
@@ -78,6 +72,7 @@ class TestMount(object):
             mock.call(['mount', MOCK_MOUNT_POINT]),
             mock.call(['umount', MOCK_MOUNT_POINT]),
         ])
+        assert mock_call.call_count == 2
 
     def test_mount_previously_mounted(self, mock_call, mock_listdir,
                                       mock_isdir, mock_ismount):
@@ -112,7 +107,7 @@ class TestMount(object):
 class TestMountsTempDir(object):
     def test_mounts_temp_dir_no_mounts(self, mock_call, mock_listdir,
                                        mock_isdir, mock_ismount, mock_mkdir,
-                                       mock_rmdir, mock_rmtree, mock_mkdtemp):
+                                       mock_rmdir, mock_mkdtemp):
         mock_mkdtemp.return_value = MOCK_TEMP_DIR
         mock_listdir.return_value = []
         mock_isdir.return_value = False
@@ -123,16 +118,18 @@ class TestMountsTempDir(object):
             mock.call(os.path.join(MOCK_TEMP_DIR, MountsTempDir.DATA_DIR)),
             mock.call(os.path.join(MOCK_TEMP_DIR, MountsTempDir.MOUNTS_DIR)),
         ])
+        assert mock_mkdir.call_count == 2
 
         mock_rmdir.assert_called_with(MOCK_TEMP_DIR)
-        mock_rmtree.assert_called_with(os.path.join(MOCK_TEMP_DIR,
-                                                    MountsTempDir.DATA_DIR))
-        mock_call.assert_not_called()
+        mock_call.assert_called_once_with([
+            'rm', '-rvf', '--one-file-system',
+            os.path.join(MOCK_TEMP_DIR, MountsTempDir.DATA_DIR)
+        ])
 
     def test_mounts_temp_dir_with_mounts(self, mock_call, mock_listdir,
                                          mock_isdir, mock_ismount, mock_mkdir,
-                                         mock_rmdir, mock_rmtree,
-                                         mock_mkdtemp, mock_open_file):
+                                         mock_rmdir, mock_mkdtemp,
+                                         mock_open_file):
         def _bind_dir_name(mountpoint):
             return os.path.basename(mountpoint) or 'root'
 
@@ -180,8 +177,14 @@ class TestMountsTempDir(object):
                                _bind_dir_name(mountpoint))],
                           stderr=subprocess.STDOUT)
                 for mountpoint in mock_mountpoints
+            ] +
+            [
+                mock.call([
+                    'rm', '-rvf', '--one-file-system',
+                    os.path.join(MOCK_TEMP_DIR, MountsTempDir.DATA_DIR)])
             ]
         )
+        assert mock_call.call_count == 1 + (len(mock_mountpoints) * 2)
         mock_mkdir.assert_has_calls(
             [
                 mock.call(os.path.join(MOCK_TEMP_DIR,
@@ -196,8 +199,7 @@ class TestMountsTempDir(object):
                 for mountpoint in mock_mountpoints
             ]
         )
-        mock_rmtree.assert_called_with(os.path.join(MOCK_TEMP_DIR,
-                                                    MountsTempDir.DATA_DIR))
+        assert mock_mkdir.call_count == 2 + len(mock_mountpoints)
         mock_rmdir.assert_has_calls(
             [
                 mock.call(os.path.join(MOCK_TEMP_DIR,
@@ -211,11 +213,12 @@ class TestMountsTempDir(object):
                 mock.call(MOCK_TEMP_DIR),
             ]
         )
+        assert mock_rmdir.call_count == 2 + len(mock_mountpoints)
 
     def test_mounts_temp_dir_cleanup_fail(self, mock_call, mock_listdir,
                                           mock_isdir, mock_ismount, mock_mkdir,
-                                          mock_rmdir, mock_rmtree,
-                                          mock_mkdtemp, mock_open_file):
+                                          mock_rmdir, mock_mkdtemp,
+                                          mock_open_file):
         def _bind_dir_name(mountpoint):
             return os.path.basename(mountpoint) or 'root'
 
@@ -251,6 +254,7 @@ class TestMountsTempDir(object):
                            _bind_dir_name(MOCK_MOUNT_POINT))],
                       stderr=subprocess.STDOUT)
         ])
+        assert mock_call.call_count == 2
         mock_mkdir.assert_has_calls([
             mock.call(os.path.join(MOCK_TEMP_DIR,
                                    MountsTempDir.DATA_DIR)),
@@ -260,5 +264,5 @@ class TestMountsTempDir(object):
                                    MountsTempDir.MOUNTS_DIR,
                                    _bind_dir_name(MOCK_MOUNT_POINT)))
         ])
-        mock_rmtree.assert_not_called()
+        assert mock_mkdir.call_count == 3
         mock_rmdir.assert_not_called()
