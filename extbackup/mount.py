@@ -38,24 +38,15 @@ class Mount(object):
         ]
 
 
-class MountsTempDir(object):
-    DATA_DIR = 'data'
-    MOUNTS_DIR = 'bind_mounts'
-
+class BindMounts(object):
     def __init__(self, mounts=[]):
         self.mounts = mounts
         self.temp_dir = None
-        self.data_dir = None
-        self.mounts_dir = None
 
     def __enter__(self):
         try:
             self.temp_dir = tempfile.mkdtemp(
                 prefix='{}.'.format(self.__class__.__name__))
-            self.data_dir = os.path.join(self.temp_dir, self.DATA_DIR)
-            self.mounts_dir = os.path.join(self.temp_dir, self.MOUNTS_DIR)
-            os.mkdir(self.data_dir)
-            os.mkdir(self.mounts_dir)
             for mountpoint in self.mounts:
                 self.mount(mountpoint)
             return self
@@ -70,14 +61,14 @@ class MountsTempDir(object):
         if not os.path.ismount(target):
             raise Exception('{} is not a mount point'.format(target))
         bind_name = bind_name or os.path.basename(target) or 'root'
-        bind_dir = os.path.join(self.mounts_dir, bind_name)
+        bind_dir = os.path.join(self.temp_dir, bind_name)
         print('Mounting {} at {}'.format(target, bind_dir))
         os.mkdir(bind_dir)
         subprocess.check_call(['mount', '--bind', target, bind_dir])
         return bind_dir
 
     def _cleanup(self):
-        if self.temp_dir:
+        if self.temp_dir and os.path.isdir(self.temp_dir):
             self._cleanup_mounts()
             self._remove_temp_dir()
 
@@ -85,26 +76,15 @@ class MountsTempDir(object):
         if not self.temp_dir:
             return
         print('Removing temporary directory {}'.format(self.temp_dir))
-        if self.data_dir:
-            subprocess.check_call(['rm', '-rvf', '--one-file-system',
-                                   self.data_dir])
         os.rmdir(self.temp_dir)
 
     def _cleanup_mounts(self):
-        if not self.mounts_dir:
-            return
-        if not os.path.isdir(self.mounts_dir):
-            return
-        for entry in os.listdir(self.mounts_dir):
-            self._unmount(os.path.join(self.mounts_dir, entry))
+        for entry in os.listdir(self.temp_dir):
+            self._unmount(os.path.join(self.temp_dir, entry))
         self._check_proc_mounts(unmount=True)
-        if len(os.listdir(self.mounts_dir)) > 0:
+        if len(os.listdir(self.temp_dir)) > 0:
             raise Exception('Mounts directory {} is not empty'
-                            .format(self.mounts_dir))
-        os.rmdir(self.mounts_dir)
-        if os.path.isdir(self.mounts_dir):
-            raise Exception('Mounts directory {} still exists!'
-                            .format(self.mounts_dir))
+                            .format(self.temp_dir))
 
     def _check_proc_mounts(self, unmount=False):
         for mount_line in open('/proc/mounts', 'r').readlines():

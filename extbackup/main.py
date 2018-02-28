@@ -1,8 +1,10 @@
 import os
 import sys
+import subprocess
+import tempfile
 
 from .mount import Mount
-from .mount import MountsTempDir
+from .mount import BindMounts
 
 
 def require_root():
@@ -13,11 +15,15 @@ def require_root():
 
 def main():
     require_root()
-    with Mount('/boot'), MountsTempDir() as td:
-        td.mount('/')
-        td.mount('/boot')
-        td.mount('/home')
+    with Mount('/boot'), BindMounts() as bind, \
+            tempfile.TemporaryDirectory() as temp_dir:
+        bind.mount('/')
+        bind.mount('/boot')
+        bind.mount('/home')
         print('====')
-        print(os.listdir(td.data_dir))
-        print(td.data_dir)
+        print(temp_dir)
+        subprocess.check_call(['touch',
+                               os.path.join(temp_dir, 'lame.txt')])
+        print(os.listdir(bind.temp_dir))
+        print(os.listdir(temp_dir))
         print('====')
