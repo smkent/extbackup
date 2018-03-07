@@ -66,13 +66,13 @@ def mock_open_file():
 
 @pytest.fixture
 def mock_mount():
-    with mock.patch('extbackup.mount._mount') as mock_mount:
+    with mock.patch('extbackup.mount.mount') as mock_mount:
         yield mock_mount
 
 
 @pytest.fixture
 def mock_unmount():
-    with mock.patch('extbackup.mount._unmount') as mock_unmount:
+    with mock.patch('extbackup.mount.unmount') as mock_unmount:
         yield mock_unmount
 
 
@@ -114,10 +114,10 @@ class TestHelpers(object):
             mock_call.side_effect = call_effect
         if expected_exception:
             with pytest.raises(expected_exception):
-                extbackup.mount._mount(
+                extbackup.mount.mount(
                     MOCK_MOUNT_POINT, source=source)
         else:
-            assert extbackup.mount._mount(
+            assert extbackup.mount.mount(
                 MOCK_MOUNT_POINT, source=source) == expected_return
         if expected_call:
             cmd = ['mount']
@@ -132,7 +132,7 @@ class TestHelpers(object):
                         mock_call):
         source = '/dev/unittest0'
         mock_ismount.return_value = False
-        assert extbackup.mount._mount(
+        assert extbackup.mount.mount(
             MOCK_MOUNT_POINT, source=source, bind=True) is True
         mock_call.assert_called_once_with(['mount', '--bind', source,
                                            MOCK_MOUNT_POINT])
@@ -140,7 +140,7 @@ class TestHelpers(object):
     def test_mount_bind_no_source(self, mock_ismount, mock_listdir, mock_isdir,
                                   mock_call):
         with pytest.raises(Exception):
-            extbackup.mount._mount(
+            extbackup.mount.mount(
                 MOCK_MOUNT_POINT, source=None, bind=True)
         mock_call.assert_not_called()
 
@@ -173,9 +173,9 @@ class TestHelpers(object):
             mock_call.side_effect = call_effect
         if expected_exception:
             with pytest.raises(expected_exception):
-                extbackup.mount._unmount(MOCK_MOUNT_POINT)
+                extbackup.mount.unmount(MOCK_MOUNT_POINT)
         else:
-            extbackup.mount._unmount(MOCK_MOUNT_POINT)
+            extbackup.mount.unmount(MOCK_MOUNT_POINT)
         if expected_call:
             mock_call.assert_called_once_with(['umount', MOCK_MOUNT_POINT])
         else:

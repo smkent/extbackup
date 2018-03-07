@@ -7,7 +7,7 @@ def _list_dir(dir_name):
     return [fn for fn in os.listdir(dir_name) if fn not in ['.keep']]
 
 
-def _mount(target, source=None, bind=False):
+def mount(target, source=None, bind=False):
     if bind and not source:
         raise Exception('source is required with bind')
     if not os.path.isdir(target):
@@ -33,7 +33,7 @@ def _mount(target, source=None, bind=False):
     return True
 
 
-def _unmount(target):
+def unmount(target):
     if not os.path.isdir(target):
         raise Exception('{} does not exist'.format(target))
     print('Unmounting {}'.format(target))
@@ -50,12 +50,12 @@ class Mount(object):
         self.should_unmount = False
 
     def __enter__(self):
-        _mount(target=self.mount_point)
+        mount(target=self.mount_point)
         self.should_unmount = True
 
     def __exit__(self, exc_type, value, traceback):
         if self.should_unmount:
-            _unmount(self.mount_point)
+            unmount(self.mount_point)
             self.should_unmount = False
 
 
@@ -84,7 +84,7 @@ class BindMounts(object):
         bind_dir = os.path.join(
             self.temp_dir, bind_name or os.path.basename(target) or 'root')
         os.mkdir(bind_dir)
-        _mount(bind_dir, source=target, bind=True)
+        mount(bind_dir, source=target, bind=True)
         return bind_dir
 
     def _cleanup(self):
@@ -117,5 +117,5 @@ class BindMounts(object):
 
     def _unmount(self, path):
         if os.path.isdir(path):
-            _unmount(path)
+            unmount(path)
             os.rmdir(path)
