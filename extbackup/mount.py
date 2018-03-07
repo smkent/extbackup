@@ -73,8 +73,6 @@ class BindMounts(object):
             self._remove_temp_dir()
 
     def _remove_temp_dir(self):
-        if not self.temp_dir:
-            return
         print('Removing temporary directory {}'.format(self.temp_dir))
         os.rmdir(self.temp_dir)
 
@@ -106,6 +104,9 @@ class BindMounts(object):
         except subprocess.CalledProcessError as e:
             print('Warning: Error {} unmounting {}: {}'
                   .format(path, e.returncode, e.output))
+        if os.path.ismount(path):
+            raise Exception('{} is still a mount point after umount'
+                            .format(path))
         if len(os.listdir(path)) > 0:
             raise Exception('{} is not empty after umount'.format(path))
         os.rmdir(path)
