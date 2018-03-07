@@ -25,5 +25,9 @@ def main():
         subprocess.check_call(['touch',
                                os.path.join(temp_dir, 'lame.txt')])
         print(os.listdir(bind.temp_dir))
+        for mount_dir in os.listdir(bind.temp_dir):
+            print('{} -> {}'
+                  .format(mount_dir,
+                          os.listdir(os.path.join(bind.temp_dir, mount_dir))))
         print(os.listdir(temp_dir))
         print('====')

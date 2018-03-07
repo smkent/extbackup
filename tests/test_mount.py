@@ -4,6 +4,7 @@ import mock
 import pytest
 import subprocess
 
+import extbackup.mount
 from extbackup.mount import Mount
 from extbackup.mount import BindMounts
 
@@ -32,25 +33,25 @@ def mock_listdir():
         yield patched_object
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_mkdir():
     with mock.patch('os.mkdir') as patched_object:
         yield patched_object
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_rmdir():
     with mock.patch('os.rmdir') as patched_object:
         yield patched_object
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_call():
     with mock.patch('subprocess.check_call') as patched_object:
         yield patched_object
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_mkdtemp():
     with mock.patch('tempfile.mkdtemp') as patched_object:
         yield patched_object
@@ -63,426 +64,326 @@ def mock_open_file():
         yield mock_file
 
 
-class TestMount(object):
-    def test_enter_previously_mounted(self, mock_call, mock_listdir,
-                                      mock_isdir, mock_ismount):
-        mock_listdir.return_value = MOCK_DIR_CONTENTS
-        mock_isdir.return_value = True
-        mock_ismount.return_value = True
-        with mock.patch.object(Mount, '__exit__'):
-            with Mount(MOCK_MOUNT_POINT):
-                pass
-        mock_call.assert_not_called()
+@pytest.fixture
+def mock_mount():
+    with mock.patch('extbackup.mount._mount') as mock_mount:
+        yield mock_mount
 
-    def test_enter_previously_unmounted(self, mock_call, mock_listdir,
-                                        mock_isdir, mock_ismount):
-        mock_listdir.return_value = ['.keep']
-        mock_isdir.return_value = True
-        mock_ismount.side_effect = [False, True]
-        with mock.patch.object(Mount, '__exit__'):
-            with Mount(MOCK_MOUNT_POINT):
-                pass
-        mock_call.assert_called_once_with(['mount', MOCK_MOUNT_POINT])
 
-    def test_enter_does_not_exist(self, mock_call, mock_listdir,
-                                  mock_isdir, mock_ismount):
-        mock_listdir.return_value = []
-        mock_isdir.return_value = False
-        mock_ismount.side_effect = [False, True]
-        with mock.patch.object(Mount, '__exit__'):
-            with pytest.raises(Exception):
-                with Mount(MOCK_MOUNT_POINT):
-                    pass
-        mock_call.assert_not_called()
+@pytest.fixture
+def mock_unmount():
+    with mock.patch('extbackup.mount._unmount') as mock_unmount:
+        yield mock_unmount
 
-    def test_enter_directory_not_empty(self, mock_call, mock_listdir,
-                                       mock_isdir, mock_ismount):
-        mock_listdir.return_value = MOCK_DIR_CONTENTS
-        mock_isdir.return_value = True
-        mock_ismount.side_effect = [False, True]
-        with mock.patch.object(Mount, '__exit__'):
-            with pytest.raises(Exception):
-                with Mount(MOCK_MOUNT_POINT):
-                    pass
-        mock_call.assert_not_called()
 
-    def test_exit_previously_mounted(self, mock_call, mock_listdir,
-                                     mock_ismount):
-        def _configure_mount(mount):
-            mount.should_unmount = False
-        mock_listdir.return_value = []
-        mock_ismount.side_effect = [True, False]
-        with mock.patch.object(Mount, '__enter__', _configure_mount):
-            with Mount(MOCK_MOUNT_POINT):
-                pass
-        mock_call.assert_not_called()
+class TestHelpers(object):
 
-    def test_exit_previously_unmounted(self, mock_call, mock_listdir,
-                                       mock_ismount):
-        def _configure_mount(mount):
-            mount.should_unmount = True
-        mock_listdir.return_value = []
-        mock_ismount.side_effect = [True, False]
-        with mock.patch.object(Mount, '__enter__', _configure_mount):
-            with Mount(MOCK_MOUNT_POINT):
-                pass
-        mock_call.assert_called_once_with(['umount', MOCK_MOUNT_POINT])
+    @pytest.mark.parametrize(['source'], [
+        (None,),
+        ('/dev/unittest0',)
+    ])
+    @pytest.mark.parametrize(['isdir',
+                              'ismount',
+                              'listdir',
+                              'call_effect',
+                              'expected_exception',
+                              'expected_call',
+                              'expected_return'], [
+        # Success
+        (True, [False, True], ['.keep'], None, None, True, True),
+        # Already mounted
+        (True, [True, True], ['.keep'], None, None, False, None),
+        # Directory missing
+        (False, [False, False], ['.keep'], None, Exception, False, None),
+        # Directory not empty
+        (True, [False, True], MOCK_DIR_CONTENTS, None, Exception, False, None),
+        # Mount command failure
+        (True, [False, True], ['.keep'],
+         subprocess.CalledProcessError(1, ['unmount']),
+         subprocess.CalledProcessError, True, None),
+        # Mount failure
+        (True, [False, False], ['.keep'], None, Exception, True, None),
+    ])
+    def test_mount(self, source, isdir, ismount, listdir, call_effect,
+                   expected_exception, expected_call, expected_return,
+                   mock_ismount, mock_listdir, mock_isdir, mock_call):
+        mock_isdir.return_value = isdir
+        mock_ismount.side_effect = ismount
+        mock_listdir.return_value = listdir
+        if call_effect:
+            mock_call.side_effect = call_effect
+        if expected_exception:
+            with pytest.raises(expected_exception):
+                extbackup.mount._mount(
+                    MOCK_MOUNT_POINT, source=source)
+        else:
+            assert extbackup.mount._mount(
+                MOCK_MOUNT_POINT, source=source) == expected_return
+        if expected_call:
+            cmd = ['mount']
+            if source:
+                cmd += [source]
+            cmd += [MOCK_MOUNT_POINT]
+            mock_call.assert_called_once_with(cmd)
+        else:
+            mock_call.assert_not_called()
 
-    def test_exit_mount_missing(self, mock_call, mock_listdir,
-                                mock_ismount):
-        def _configure_mount(mount):
-            mount.should_unmount = True
+    def test_mount_bind(self, mock_ismount, mock_listdir, mock_isdir,
+                        mock_call):
+        source = '/dev/unittest0'
         mock_ismount.return_value = False
-        with mock.patch.object(Mount, '__enter__', _configure_mount):
-            with pytest.raises(Exception):
-                with Mount(MOCK_MOUNT_POINT):
-                    pass
+        assert extbackup.mount._mount(
+            MOCK_MOUNT_POINT, source=source, bind=True) is True
+        mock_call.assert_called_once_with(['mount', '--bind', source,
+                                           MOCK_MOUNT_POINT])
+
+    def test_mount_bind_no_source(self, mock_ismount, mock_listdir, mock_isdir,
+                                  mock_call):
+        with pytest.raises(Exception):
+            extbackup.mount._mount(
+                MOCK_MOUNT_POINT, source=None, bind=True)
         mock_call.assert_not_called()
 
-    def test_exit_not_empty_after_unmount(self, mock_call, mock_listdir,
-                                          mock_ismount):
-        def _configure_mount(mount):
-            mount.should_unmount = True
-        mock_ismount.side_effect = [True, False]
-        mock_listdir.return_value = MOCK_DIR_CONTENTS
-        with mock.patch.object(Mount, '__enter__', _configure_mount):
-            with pytest.raises(Exception):
-                with Mount(MOCK_MOUNT_POINT):
-                    pass
-        mock_call.assert_called_once_with(['umount', MOCK_MOUNT_POINT])
+    @pytest.mark.parametrize(['isdir',
+                              'ismount',
+                              'listdir',
+                              'call_effect',
+                              'expected_exception',
+                              'expected_call'], [
+        # Success
+        (True, False, ['.keep'], None, None, True),
+        # Directory missing
+        (False, False, ['.keep'], None, Exception, False),
+        # Unmount command failure
+        (True, True, ['.keep'],
+         subprocess.CalledProcessError(1, ['unmount']),
+         subprocess.CalledProcessError, True),
+        # Directory not empty after unmount
+        (True, False, MOCK_DIR_CONTENTS, None, Exception, True),
+        # Still mounted after unmount
+        (True, True, ['.keep'], None, Exception, True),
+    ])
+    def test_unmount(self, isdir, ismount, listdir, expected_exception,
+                     expected_call, call_effect,
+                     mock_ismount, mock_listdir, mock_isdir, mock_call):
+        mock_isdir.return_value = isdir
+        mock_ismount.return_value = ismount
+        mock_listdir.return_value = listdir
+        if call_effect:
+            mock_call.side_effect = call_effect
+        if expected_exception:
+            with pytest.raises(expected_exception):
+                extbackup.mount._unmount(MOCK_MOUNT_POINT)
+        else:
+            extbackup.mount._unmount(MOCK_MOUNT_POINT)
+        if expected_call:
+            mock_call.assert_called_once_with(['umount', MOCK_MOUNT_POINT])
+        else:
+            mock_call.assert_not_called()
 
-    def test_exit_still_mounted(self, mock_call, mock_listdir,
-                                mock_ismount):
+
+class TestMount(object):
+    def test_enter(self, mock_mount):
+        with mock.patch.object(Mount, '__exit__',
+                               mock.MagicMock(return_value=None)):
+            mount = Mount(MOCK_MOUNT_POINT)
+            with mount:
+                assert mount.should_unmount is True
+            mock_mount.assert_called_once_with(target=MOCK_MOUNT_POINT)
+
+    @pytest.mark.parametrize(['should_unmount'], [
+        (True,),
+        (False,),
+    ])
+    def test_exit(self, should_unmount, mock_unmount):
         def _configure_mount(mount):
-            mount.should_unmount = True
-        mock_ismount.return_value = True
+            mount.should_unmount = should_unmount
         with mock.patch.object(Mount, '__enter__', _configure_mount):
-            with pytest.raises(Exception):
-                with Mount(MOCK_MOUNT_POINT):
-                    pass
-        mock_call.assert_called_once_with(['umount', MOCK_MOUNT_POINT])
+            with Mount(MOCK_MOUNT_POINT):
+                pass
+            if should_unmount:
+                mock_unmount.assert_called_once_with(MOCK_MOUNT_POINT)
+            else:
+                mock_unmount.assert_not_called()
 
 
 class TestBindMounts(object):
     def _bind_dir_name(self, mountpoint):
         return os.path.basename(mountpoint) or 'root'
 
-    def test_no_mounts(self, mock_call, mock_listdir, mock_isdir, mock_ismount,
-                       mock_mkdir, mock_rmdir, mock_mkdtemp):
+    def test_no_mounts(self, mock_mkdtemp, mock_ismount, mock_listdir,
+                       mock_mkdir, mock_rmdir, mock_open_file,
+                       mock_mount, mock_unmount):
         mock_mkdtemp.return_value = MOCK_TEMP_DIR
-        mock_listdir.return_value = []
-        mock_isdir.return_value = True
         mock_ismount.return_value = False
+        mock_listdir.return_value = []
         with BindMounts():
             pass
         mock_mkdir.assert_not_called()
-        mock_rmdir.assert_called_with(MOCK_TEMP_DIR)
-        mock_call.assert_not_called()
-
-    def test_enter_with_mounts(self, mock_call, mock_listdir, mock_isdir,
-                               mock_ismount, mock_mkdir, mock_rmdir,
-                               mock_mkdtemp):
-        mock_mountpoints = [MOCK_MOUNT_POINT, '/mnt/other-mount-point', '/']
-        mock_mkdtemp.return_value = MOCK_TEMP_DIR
-        mock_listdir.side_effect = [
-                # Mounts directory list
-                [self._bind_dir_name(m) for m in mock_mountpoints],
-            ]
-        mock_ismount.return_value = True
-        with mock.patch.object(BindMounts, '__exit__'), \
-                mock.patch.object(BindMounts, '_cleanup') as mock_cleanup:
-            with BindMounts() as m:
-                for mountpoint in mock_mountpoints:
-                    m.mount(mountpoint)
-        assert mock_call.call_count == len(mock_mountpoints)
-        mock_call.assert_has_calls(
-            [
-                mock.call(['mount', '--bind', mountpoint,
-                           os.path.join(
-                               MOCK_TEMP_DIR,
-                               self._bind_dir_name(mountpoint))])
-                for mountpoint in mock_mountpoints
-            ])
-        assert mock_mkdir.call_count == len(mock_mountpoints)
-        mock_mkdir.assert_has_calls(
-            [
-                mock.call(os.path.join(MOCK_TEMP_DIR,
-                                       self._bind_dir_name(mountpoint)))
-                for mountpoint in mock_mountpoints
-            ])
-        mock_cleanup.assert_not_called()
-
-    def test_enter_mkdtemp_fail(self, mock_call, mock_listdir, mock_isdir,
-                                mock_ismount, mock_mkdir, mock_rmdir,
-                                mock_mkdtemp):
-        mock_mkdtemp.side_effect = Exception
-        mock_listdir.side_effect = []
-        mock_ismount.return_value = False
-        with mock.patch.object(BindMounts, '__exit__'), \
-                mock.patch.object(BindMounts, 'mount') as mock_mount, \
-                mock.patch.object(BindMounts, '_cleanup') as mock_cleanup:
-            with pytest.raises(Exception):
-                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
-                    pass
-        mock_call.assert_not_called()
-        mock_mkdir.assert_not_called()
         mock_rmdir.assert_not_called()
         mock_mount.assert_not_called()
-        mock_cleanup.assert_called_once_with()
+        mock_unmount.assert_not_called()
 
-    def test_enter_not_mountpoint(self, mock_call, mock_listdir, mock_isdir,
-                                  mock_ismount, mock_mkdir, mock_rmdir,
-                                  mock_mkdtemp):
+    def test_enter_success(self, mock_mkdtemp, mock_ismount, mock_mkdir,
+                           mock_mount):
         mock_mkdtemp.return_value = MOCK_TEMP_DIR
-        mock_listdir.side_effect = [
-                # Mounts directory list
-                [self._bind_dir_name(MOCK_TEMP_DIR)],
-            ]
+        mock_ismount.return_value = True
+        with mock.patch.object(BindMounts, '__exit__'), \
+                mock.patch.object(BindMounts, '_cleanup') as mock_cleanup:
+            with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                pass
+        mock_cleanup.assert_not_called()
+        mock_mkdir.assert_called_once_with(MOCK_BIND_MOUNT)
+        mock_mount.assert_called_once_with(MOCK_BIND_MOUNT,
+                                           source=MOCK_MOUNT_POINT,
+                                           bind=True)
+
+    def test_enter_mkdtemp_fail(self, mock_mkdtemp, mock_ismount, mock_mkdir,
+                                mock_mount):
+        mock_mkdtemp.side_effect = Exception
+        mock_ismount.return_value = True
+        with mock.patch.object(BindMounts, '__exit__'), \
+                mock.patch.object(BindMounts, '_cleanup') as mock_cleanup:
+            with pytest.raises(Exception):
+                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                    pass
+        mock_cleanup.assert_called_once_with()
+        mock_mkdir.assert_not_called()
+        mock_mount.assert_not_called()
+
+    def test_enter_not_mount_point(self, mock_mkdtemp, mock_ismount,
+                                   mock_mkdir, mock_mount):
+        mock_mkdtemp.return_value = MOCK_TEMP_DIR
         mock_ismount.return_value = False
         with mock.patch.object(BindMounts, '__exit__'), \
                 mock.patch.object(BindMounts, '_cleanup') as mock_cleanup:
             with pytest.raises(Exception):
                 with BindMounts(mounts=[MOCK_MOUNT_POINT]):
                     pass
-        mock_call.assert_not_called()
-        mock_mkdir.assert_not_called()
         mock_cleanup.assert_called_once_with()
-
-    def test_exit_with_mounts(self, mock_call, mock_listdir, mock_isdir,
-                              mock_ismount, mock_mkdir, mock_rmdir,
-                              mock_open_file):
-        def _mock_enter(bind_mounts):
-            bind_mounts.temp_dir = MOCK_TEMP_DIR
-        mock_mountpoints = [MOCK_MOUNT_POINT, '/mnt/other-mount-point', '/']
-        mock_listdir.side_effect = (
-            [
-                # Mounts directory list
-                [self._bind_dir_name(m) for m in mock_mountpoints],
-            ] +
-            [
-                # Mount point list after unmount
-                []
-            ] * len(mock_mountpoints) +
-            [
-                # Mounts directory list after _unmount
-                []
-            ])
-        mock_isdir.side_effect = (
-            # Start of _cleanup_mounts
-            [True] +
-            # In _unmount prior to umount
-            [True] * len(mock_mountpoints))
-        # Mount status after unmount
-        mock_ismount.return_value = False
-        with mock.patch.object(BindMounts, '__enter__', _mock_enter):
-            with BindMounts(mounts=mock_mountpoints):
-                pass
-        assert mock_call.call_count == len(mock_mountpoints)
-        mock_call.assert_has_calls(
-            [
-                mock.call(['umount',
-                           os.path.join(
-                               MOCK_TEMP_DIR,
-                               self._bind_dir_name(mountpoint))],
-                          stderr=subprocess.STDOUT)
-                for mountpoint in mock_mountpoints
-            ])
         mock_mkdir.assert_not_called()
-        assert mock_rmdir.call_count == 1 + len(mock_mountpoints)
-        mock_rmdir.assert_has_calls(
-            [
-                mock.call(os.path.join(MOCK_TEMP_DIR,
-                                       self._bind_dir_name(mountpoint)))
-                for mountpoint in mock_mountpoints
-            ] +
-            [
-                mock.call(MOCK_TEMP_DIR),
-            ])
+        mock_mount.assert_not_called()
 
-    def test_exit_unmount_not_dir(self, mock_call, mock_listdir, mock_isdir,
-                                  mock_ismount, mock_mkdir, mock_rmdir,
-                                  mock_open_file):
-        def _mock_enter(bind_mounts):
-            bind_mounts.temp_dir = MOCK_TEMP_DIR
-        mock_listdir.side_effect = (
-            [
-                # Mounts directory list
-                [self._bind_dir_name(MOCK_MOUNT_POINT)],
-            ] +
-            [
-                # Mount point list after unmount
-                MOCK_DIR_CONTENTS,
-            ])
-        mock_isdir.side_effect = (
-            # Start of _cleanup_mounts
-            [True] +
-            # In _unmount prior to umount
-            [False])
-        # Mount status after unmount
-        mock_ismount.return_value = False
-        with mock.patch.object(BindMounts, '__enter__', _mock_enter):
-            with pytest.raises(Exception):
-                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
-                    pass
-        mock_call.assert_not_called()
-        mock_mkdir.assert_not_called()
-        mock_rmdir.assert_not_called()
-
-    def test_exit_umount_fail(self, mock_call, mock_listdir, mock_isdir,
-                              mock_ismount, mock_mkdir, mock_rmdir,
-                              mock_open_file):
-        def _mock_enter(bind_mounts):
-            bind_mounts.temp_dir = MOCK_TEMP_DIR
-        mock_listdir.side_effect = (
-            [
-                # Mounts directory list
-                [self._bind_dir_name(MOCK_MOUNT_POINT)],
-            ] +
-            [
-                # Mount point list after unmount
-                MOCK_DIR_CONTENTS,
-            ])
-        mock_isdir.side_effect = (
-            # Start of _cleanup_mounts
-            [True] +
-            # In _unmount prior to umount
-            [True])
-        # Mount status after unmount
-        mock_ismount.return_value = True
-        # umount call failure
-        mock_call.side_effect = subprocess.CalledProcessError(1, ['umount'])
-        with mock.patch.object(BindMounts, '__enter__', _mock_enter):
-            with pytest.raises(Exception):
-                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
-                    pass
-        assert mock_call.call_count == 1
-        mock_call.assert_called_once_with(['umount', MOCK_BIND_MOUNT],
-                                          stderr=subprocess.STDOUT)
-        mock_mkdir.assert_not_called()
-        mock_rmdir.assert_not_called()
-
-    def test_exit_umount_still_mounted(self, mock_call, mock_listdir,
-                                       mock_isdir, mock_ismount, mock_mkdir,
-                                       mock_rmdir, mock_open_file):
-        def _mock_enter(bind_mounts):
-            bind_mounts.temp_dir = MOCK_TEMP_DIR
-        mock_listdir.side_effect = (
-            [
-                # Mounts directory list
-                [self._bind_dir_name(MOCK_MOUNT_POINT)],
-            ] +
-            [
-                # Mount point list after unmount
-                MOCK_DIR_CONTENTS,
-            ])
-        mock_isdir.side_effect = (
-            # Start of _cleanup_mounts
-            [True] +
-            # In _unmount prior to umount
-            [True])
-        # Mount status after unmount
-        mock_ismount.return_value = True
-        with mock.patch.object(BindMounts, '__enter__', _mock_enter):
-            with pytest.raises(Exception):
-                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
-                    pass
-        assert mock_call.call_count == 1
-        mock_call.assert_called_once_with(['umount', MOCK_BIND_MOUNT],
-                                          stderr=subprocess.STDOUT)
-        mock_mkdir.assert_not_called()
-        mock_rmdir.assert_not_called()
-
-    def test_exit_umount_directory_not_empty(self, mock_call, mock_listdir,
-                                             mock_isdir, mock_ismount,
-                                             mock_mkdir, mock_rmdir,
-                                             mock_open_file):
-        def _mock_enter(bind_mounts):
-            bind_mounts.temp_dir = MOCK_TEMP_DIR
-        mock_listdir.side_effect = (
-            [
-                # Mounts directory list
-                [self._bind_dir_name(MOCK_MOUNT_POINT)],
-            ] +
-            [
-                # Mount point list after unmount
-                MOCK_DIR_CONTENTS,
-            ])
-        mock_isdir.side_effect = (
-            # Start of _cleanup_mounts
-            [True] +
-            # In _unmount prior to umount
-            [True])
-        # Mount status after unmount
-        mock_ismount.return_value = False
-        with mock.patch.object(BindMounts, '__enter__', _mock_enter):
-            with pytest.raises(Exception):
-                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
-                    pass
-        assert mock_call.call_count == 1
-        mock_call.assert_called_once_with(['umount', MOCK_BIND_MOUNT],
-                                          stderr=subprocess.STDOUT)
-        mock_mkdir.assert_not_called()
-        mock_rmdir.assert_not_called()
-
-    @pytest.mark.parametrize(['proc_mount_present_after_unmount'], [
-        (False, ),  # Successful unmount
-        (True, ),   # Failed unmount
+    @pytest.mark.parametrize(['temp_dir'], [
+        (None,),
+        (MOCK_TEMP_DIR,),
     ])
-    def test_exit_proc_mounts(self,
-                              proc_mount_present_after_unmount,
-                              mock_call, mock_listdir, mock_isdir,
-                              mock_ismount, mock_mkdir, mock_rmdir,
-                              mock_mkdtemp):
-        def _mock_enter(bind_mounts):
-            bind_mounts.temp_dir = MOCK_TEMP_DIR
-
-        def _invoke_bind_mounts():
+    def test_exit_no_temp_dir(self, temp_dir, mock_unmount, mock_isdir):
+        def _configure_bind_mounts(bind_mounts):
+            bind_mounts.temp_dir = temp_dir
+        mock_isdir.return_value = False
+        with mock.patch.object(BindMounts, '__enter__',
+                               _configure_bind_mounts):
             with BindMounts(mounts=[MOCK_MOUNT_POINT]):
                 pass
+        mock_unmount.assert_not_called()
 
+    def test_exit_success(self, mock_unmount, mock_listdir, mock_isdir,
+                          mock_ismount, mock_open_file):
+        def _configure_bind_mounts(bind_mounts):
+            bind_mounts.temp_dir = MOCK_TEMP_DIR
+        mock_listdir.side_effect = [
+            [self._bind_dir_name(MOCK_MOUNT_POINT)],
+            [],
+        ]
+        mock_isdir.return_value = True
+        mock_ismount.return_value = True
+        with mock.patch.object(BindMounts, '__enter__',
+                               _configure_bind_mounts):
+            with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                pass
+        mock_unmount.assert_called_once_with(MOCK_BIND_MOUNT)
+
+    def test_exit_success_multiple_mounts(self, mock_unmount, mock_listdir,
+                                          mock_isdir, mock_ismount,
+                                          mock_open_file):
+        def _configure_bind_mounts(bind_mounts):
+            bind_mounts.temp_dir = MOCK_TEMP_DIR
+        mock_mountpoints = [MOCK_MOUNT_POINT, '/mnt/other-mount-point', '/']
+        mock_listdir.side_effect = [
+            [self._bind_dir_name(mountpoint)
+             for mountpoint in mock_mountpoints],
+            [],
+        ]
+        mock_isdir.return_value = True
+        mock_ismount.return_value = True
+        with mock.patch.object(BindMounts, '__enter__',
+                               _configure_bind_mounts):
+            with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                pass
+        mock_unmount.assert_has_calls([
+            mock.call(os.path.join(MOCK_TEMP_DIR,
+                                   self._bind_dir_name(mountpoint)))
+            for mountpoint in mock_mountpoints
+        ])
+
+    def test_exit_mounts_directory_not_empty(self, mock_unmount, mock_listdir,
+                                             mock_isdir, mock_ismount,
+                                             mock_open_file):
+        def _configure_bind_mounts(bind_mounts):
+            bind_mounts.temp_dir = MOCK_TEMP_DIR
+        mock_listdir.side_effect = [
+            [self._bind_dir_name(MOCK_MOUNT_POINT)],
+            MOCK_DIR_CONTENTS,
+        ]
+        mock_isdir.return_value = True
+        mock_ismount.return_value = True
+        with mock.patch.object(BindMounts, '__enter__',
+                               _configure_bind_mounts):
+            with pytest.raises(Exception):
+                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                    pass
+        mock_unmount.assert_called_once_with(MOCK_BIND_MOUNT)
+
+    def test_exit_unmount_proc_mounts(self, mock_unmount, mock_listdir,
+                                      mock_isdir, mock_ismount):
+        def _configure_bind_mounts(bind_mounts):
+            bind_mounts.temp_dir = MOCK_TEMP_DIR
+        mock_listdir.side_effect = [
+            [self._bind_dir_name(MOCK_MOUNT_POINT)],
+            [],
+        ]
+        mock_isdir.return_value = True
+        mock_ismount.return_value = True
         proc_data = '/ {} ext4 rw 0 0'.format(MOCK_BIND_MOUNT)
         with mock.patch('builtins.open', create=True) as mock_open:
             mock_open.side_effect = [
                 mock.mock_open(read_data=proc_data).return_value,
-                mock.mock_open(
-                    read_data=(proc_data if proc_mount_present_after_unmount
-                               else '')).return_value
+                mock.mock_open(read_data='').return_value,
             ]
-            mock_listdir.side_effect = (
-                [
-                    # Mounts directory list
-                    [],
-                ] +
-                [
-                    # Mount point list after unmount
-                    [],
-                ] +
-                [
-                    # Mounts directory list after _unmount
-                    []
-                ])
-            mock_isdir.side_effect = (
-                # Start of _cleanup_mounts
-                [True] +
-                # In _unmount prior to umount
-                [True])
-            # Mount status after unmount
-            mock_ismount.return_value = False
-            with mock.patch.object(BindMounts, '__enter__', _mock_enter):
-                if proc_mount_present_after_unmount:
-                    with pytest.raises(Exception):
-                        _invoke_bind_mounts()
-                else:
-                    _invoke_bind_mounts()
-            assert mock_call.call_count == 1
-            mock_call.assert_called_once_with(['umount', MOCK_BIND_MOUNT],
-                                              stderr=subprocess.STDOUT)
-            mock_mkdir.assert_not_called()
-            if proc_mount_present_after_unmount:
-                mock_rmdir.assert_called_once_with(MOCK_BIND_MOUNT)
-            else:
-                assert mock_rmdir.call_count == 2
-                mock_rmdir.assert_has_calls([
-                    mock.call(MOCK_BIND_MOUNT),
-                    mock.call(MOCK_TEMP_DIR),
-                ])
+            with mock.patch.object(BindMounts, '__enter__',
+                                   _configure_bind_mounts):
+                with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                    pass
+            assert mock_unmount.call_count == 2
+            mock_unmount.assert_has_calls([
+                mock.call(MOCK_BIND_MOUNT),
+                mock.call(MOCK_BIND_MOUNT),
+            ])
+
+    def test_exit_unmount_proc_mounts_fail(self, mock_unmount, mock_listdir,
+                                           mock_isdir, mock_ismount):
+        def _configure_bind_mounts(bind_mounts):
+            bind_mounts.temp_dir = MOCK_TEMP_DIR
+        mock_listdir.side_effect = [
+            [self._bind_dir_name(MOCK_MOUNT_POINT)],
+            [],
+        ]
+        mock_isdir.return_value = True
+        mock_ismount.return_value = True
+        proc_data = '/ {} ext4 rw 0 0'.format(MOCK_BIND_MOUNT)
+        with mock.patch('builtins.open', create=True) as mock_open:
+            mock_open.side_effect = [
+                mock.mock_open(read_data=proc_data).return_value,
+                mock.mock_open(read_data=proc_data).return_value,
+            ]
+            with mock.patch.object(BindMounts, '__enter__',
+                                   _configure_bind_mounts):
+                with pytest.raises(Exception):
+                    with BindMounts(mounts=[MOCK_MOUNT_POINT]):
+                        pass
+            assert mock_unmount.call_count == 2
+            mock_unmount.assert_has_calls([
+                mock.call(MOCK_BIND_MOUNT),
+                mock.call(MOCK_BIND_MOUNT),
+            ])

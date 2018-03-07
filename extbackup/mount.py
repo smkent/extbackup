@@ -3,39 +3,60 @@ import subprocess
 import tempfile
 
 
+def _list_dir(dir_name):
+    return [fn for fn in os.listdir(dir_name) if fn not in ['.keep']]
+
+
+def _mount(target, source=None, bind=False):
+    if bind and not source:
+        raise Exception('source is required with bind')
+    if not os.path.isdir(target):
+        raise Exception('{} does not exist'.format(source))
+    if os.path.ismount(target):
+        return
+    if len(_list_dir(target)) > 0:
+        raise Exception('{} is not empty'.format(source))
+    cmd = ['mount']
+    if bind:
+        cmd += ['--bind']
+    if source:
+        cmd += [source]
+    cmd += [target]
+    if source:
+        print('Mounting {} at {}'.format(source, target))
+    else:
+        print('Mounting {}'.format(target))
+    subprocess.check_call(cmd)
+    if not bind:
+        if not os.path.ismount(target):
+            raise Exception('{} not mounted'.format(target))
+    return True
+
+
+def _unmount(target):
+    if not os.path.isdir(target):
+        raise Exception('{} does not exist'.format(target))
+    print('Unmounting {}'.format(target))
+    subprocess.check_call(['umount', target])
+    if len(_list_dir(target)) > 0:
+        raise Exception('{} is not empty'.format(target))
+    if os.path.ismount(target):
+        raise Exception('{} is still mounted'.format(target))
+
+
 class Mount(object):
     def __init__(self, mount_point):
         self.mount_point = mount_point
         self.should_unmount = False
 
     def __enter__(self):
-        if not os.path.ismount(self.mount_point):
-            if not os.path.isdir(self.mount_point):
-                raise Exception('{} does not exist'.format(self.mount_point))
-            if len(self._list_dir()) > 0:
-                raise Exception('{} is not empty'.format(self.mount_point))
-            print('Mounting {}'.format(self.mount_point))
-            subprocess.check_call(['mount', self.mount_point])
-            self.should_unmount = True
+        _mount(target=self.mount_point)
+        self.should_unmount = True
 
     def __exit__(self, exc_type, value, traceback):
-        if not self.should_unmount:
-            return
-        if not os.path.ismount(self.mount_point):
-            raise Exception('{} is not mounted')
-        print('Unmounting {}'.format(self.mount_point))
-        subprocess.check_call(['umount', self.mount_point])
-        if len(self._list_dir()) > 0:
-            raise Exception('{} is not empty'.format(self.mount_point))
-        if os.path.ismount(self.mount_point):
-            raise Exception('{} is still mounted'.format(self.mount_point))
-        self.should_unmount = False
-
-    def _list_dir(self):
-        return [
-            fn for fn in os.listdir(self.mount_point)
-            if fn not in ['.keep']
-        ]
+        if self.should_unmount:
+            _unmount(self.mount_point)
+            self.should_unmount = False
 
 
 class BindMounts(object):
@@ -60,11 +81,10 @@ class BindMounts(object):
     def mount(self, target, bind_name=None):
         if not os.path.ismount(target):
             raise Exception('{} is not a mount point'.format(target))
-        bind_name = bind_name or os.path.basename(target) or 'root'
-        bind_dir = os.path.join(self.temp_dir, bind_name)
-        print('Mounting {} at {}'.format(target, bind_dir))
+        bind_dir = os.path.join(
+            self.temp_dir, bind_name or os.path.basename(target) or 'root')
         os.mkdir(bind_dir)
-        subprocess.check_call(['mount', '--bind', target, bind_dir])
+        _mount(bind_dir, source=target, bind=True)
         return bind_dir
 
     def _cleanup(self):
@@ -96,17 +116,6 @@ class BindMounts(object):
             self._check_proc_mounts(unmount=False)
 
     def _unmount(self, path):
-        if not os.path.isdir(path):
-            return
-        try:
-            print('Unmounting {}'.format(path))
-            subprocess.check_call(['umount', path], stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            print('Warning: Error {} unmounting {}: {}'
-                  .format(path, e.returncode, e.output))
-        if os.path.ismount(path):
-            raise Exception('{} is still a mount point after umount'
-                            .format(path))
-        if len(os.listdir(path)) > 0:
-            raise Exception('{} is not empty after umount'.format(path))
-        os.rmdir(path)
+        if os.path.isdir(path):
+            _unmount(path)
+            os.rmdir(path)
