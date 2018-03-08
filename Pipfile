@@ -4,6 +4,7 @@ name = "pypi"
 url = "https://pypi.python.org/simple"
 
 [packages]
+pyyaml = "*"
 
 [dev-packages]
 flake8 = "*"

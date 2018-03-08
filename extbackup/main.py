@@ -1,7 +1,11 @@
 import argparse
+import contextlib
+import datetime
 import enum
 import os
+import shutil
 import stat
+import socket
 import subprocess
 import sys
 import tempfile
@@ -10,6 +14,7 @@ from .mount import mount
 from .mount import unmount
 from .mount import Mount
 from .mount import BindMounts
+from .rsync import RsyncPaths
 
 MAPPER_NAME = 'backup_offsite'
 MOUNT_DIR = '/mnt/backup-offsite'
@@ -21,19 +26,118 @@ class Action(enum.Enum):
     UNMOUNT = 'unmount'
 
 
-def _require_root():
-    if os.getuid():
-        os.execvp('sudo', ['sudo'] + sys.argv)
-        raise Exception('os.execvp failed')
-
-
 class ExternalBackup(object):
+    def __init__(self, pretend=False, config_file=None):
+        self.pretend = pretend
+        self.config_file = config_file
+        self.mounts = ['/', '/boot', '/home']
+        self.rsync = None
+
+    @property
+    def hostname(self):
+        hostname = socket.gethostname()
+        if not hostname:
+            raise Exception('Unable to determine system hostname')
+        return hostname
+
+    @property
+    def target(self):
+        if not hasattr(self, '_target'):
+            if not os.path.ismount(MOUNT_DIR):
+                raise Exception('{} is not mounted'.format(MOUNT_DIR))
+            target = os.path.join(MOUNT_DIR, self.hostname)
+            if not os.path.isdir(target):
+                print('Creating directory {}'.format(target))
+                os.mkdir(target)
+            os.chmod(target, 0o0700)
+            self._target = target
+        return self._target
+
+    def backup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.rsync = RsyncPaths(self.config_file, temp_dir)
+            # Mount all required filesystems
+            with contextlib.ExitStack() as stack:
+                for mount_point in self.mounts:
+                    stack.enter_context(Mount(mount_point))
+                # Create bind mounts
+                with BindMounts(mounts=self.mounts) as bind_mounts:
+                    self._backup_run(bind_mounts.temp_dir)
+
+    def _backup_run(self, bind_dir):
+        print('Backing up {} to {}'.format(self.hostname, self.target))
+        self._backup_versioned(bind_dir)
+        self._backup_single(bind_dir)
+        self._backup_mysql()
+
+    def _backup_versioned(self, bind_dir):
+        versioned_dir = datetime.datetime.now().strftime('%Y.%m.%d_%H:%M')
+        target = os.path.join(self.target, versioned_dir)
+        if os.path.isdir(target):
+            raise Exception('{} already exists'.format(target))
+        self._runcmd(
+            self._rsync_cmd(bind_dir, target,
+                            link_dest=self._find_prev_version(),
+                            single=False))
+        # Copy rsync configuration files to backup directory
+        if not self.pretend:
+            self.rsync.copy_config(os.path.join(target, 'rsync-config'))
+
+    def _backup_single(self, bind_dir):
+        self._runcmd(
+            self._rsync_cmd(bind_dir, os.path.join(self.target, 'single'),
+                            single=True))
+
+    def _backup_mysql(self):
+        if self.pretend:
+            return
+        with tempfile.TemporaryDirectory() as mysql_dir:
+            backup_file = os.path.join(mysql_dir, 'mysqldump.sql')
+            with open(backup_file, 'w') as f:
+                self._runcmd(['mysqldump', '--all-databases'], stdout=f)
+            self._runcmd(['gzip', backup_file])
+            backup_file = '{}.gz'.format(backup_file)
+            shutil.copy(backup_file, os.path.join(
+                self.target, 'single', os.path.basename(backup_file)))
+
+    def _find_prev_version(self):
+        for fn in sorted(os.listdir(self.target), reverse=True):
+            if fn in ['single']:
+                continue
+            full_path = os.path.join(self.target, fn)
+            if os.path.isdir(full_path):
+                return full_path
+
+    def _runcmd(self, cmd, stdout=None):
+        print('+ {}'.format(' '.join(cmd)), file=sys.stderr)
+        subprocess.check_call(cmd, stdout=stdout)
+
+    def _rsync_cmd(self, source, dest, link_dest=None, single=False):
+        rsync_cmd = [
+            'ionice', '-c', '3',
+            'nice', '-n', '19',
+            'rsync', '-P', '-avHSAX', '--numeric-ids',
+            '--delete', '--delete-excluded',
+        ]
+        rsync_cmd += self.rsync.get_exclude_include_args(single)
+        if link_dest:
+            rsync_cmd.append('--link-dest={}'.format(link_dest))
+        # Add trailing slashes to source path
+        rsync_cmd += [os.path.join(source, ''), dest]
+        if self.pretend:
+            rsync_cmd.append('--dry-run')
+        return rsync_cmd
+
+
+class App(object):
     def __init__(self, args):
         self.args = args
+        self.external_backup = ExternalBackup(pretend=args.pretend,
+                                              config_file=args.config_file)
 
     def run(self):
         if self.args.action == Action.BACKUP:
-            self._backup()
+            self.external_backup.backup()
         if self.args.action == Action.MOUNT:
             self._mount()
         if self.args.action == Action.UNMOUNT:
@@ -62,32 +166,24 @@ class ExternalBackup(object):
             print('Started {}'.format(self._mapper_path()))
         mount(MOUNT_DIR, source=self._mapper_path())
 
-    def _backup(self):
-        if not os.path.ismount(MOUNT_DIR):
-            raise Exception('{} is not mounted'.format(MOUNT_DIR))
-        with Mount('/boot'), BindMounts() as bind, \
-                tempfile.TemporaryDirectory() as temp_dir:
-            bind.mount('/')
-            bind.mount('/boot')
-            bind.mount('/home')
-            print('====')
-            print(temp_dir)
-            subprocess.check_call(['touch',
-                                   os.path.join(temp_dir, 'lame.txt')])
-            print(os.listdir(bind.temp_dir))
-            for mount_dir in os.listdir(bind.temp_dir):
-                print('{} -> {}'
-                      .format(mount_dir,
-                              os.listdir(os.path.join(bind.temp_dir,
-                                                      mount_dir))))
-            print(os.listdir(temp_dir))
-            print('====')
+
+def _require_root():
+    if os.getuid():
+        os.execvp('sudo', ['sudo'] + sys.argv)
+        raise Exception('os.execvp failed')
 
 
 def main():
     ap = argparse.ArgumentParser(description='External disk backup tool')
+    ap.add_argument('-c', '--config', dest='config_file', metavar='file',
+                    default=os.path.join(
+                        os.path.expanduser('~'), '.extbackup'),
+                    help=('rsync include/exclude paths config file '
+                          '(default: %(default)s)'))
     ap.add_argument('-d', '--device', dest='device', metavar='dev',
                     help='Device to mount')
+    ap.add_argument('-p', '--pretend', dest='pretend', action='store_true',
+                    help='Perform a backup dry run')
     ap.add_argument('action',  type=Action,
                     help=('Action to perform (choices: {})'
                           .format(' '.join([a.value for a in Action]))))
@@ -95,5 +191,5 @@ def main():
 
     _require_root()
 
-    eb = ExternalBackup(args)
-    eb.run()
+    app = App(args)
+    app.run()
