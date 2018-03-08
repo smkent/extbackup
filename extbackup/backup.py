@@ -12,7 +12,7 @@ from .mount import BindMounts
 from .rsync import RsyncPaths
 
 MOUNT_DIR = '/mnt/backup-offsite'
-TIMESTAMP_FORMAT = '%Y.%m.%d_%H:%M'
+TIMESTAMP_FORMAT = '%Y%m%d-%H%M'
 
 
 class ExternalBackup(object):
