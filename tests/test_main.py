@@ -1,7 +1,7 @@
 import os
 
-import mock
 import pytest
+from unittest import mock
 
 from extbackup.main import Action
 from extbackup.main import App

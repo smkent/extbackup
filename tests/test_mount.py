@@ -1,8 +1,8 @@
 import os
 
-import mock
 import pytest
 import subprocess
+from unittest import mock
 
 import extbackup.mount
 from extbackup.mount import Mount

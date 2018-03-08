@@ -8,6 +8,5 @@ pyyaml = "*"
 
 [dev-packages]
 flake8 = "*"
-mock = "*"
 pytest = "*"
 pytest-cov = "*"
