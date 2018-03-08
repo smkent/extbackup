@@ -86,7 +86,7 @@ class ExternalBackup(object):
             self._runcmd(['gzip', backup_file])
             backup_file = '{}.gz'.format(backup_file)
             shutil.copy(backup_file, os.path.join(
-                self.target, 'single', os.path.basename(backup_file)))
+                self.target, os.path.basename(backup_file)))
 
     def _find_prev_version(self):
         for fn in sorted(os.listdir(self.target), reverse=True):
