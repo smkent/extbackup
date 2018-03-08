@@ -4,7 +4,7 @@ import mock
 import pytest
 
 from extbackup.main import Action
-from extbackup.main import ExternalBackup
+from extbackup.main import App
 from extbackup.main import MAPPER_NAME
 from extbackup.main import MOUNT_DIR
 
@@ -64,9 +64,9 @@ class TestApp(object):
         mock_exists.side_effect = [True, False]
         mock_stat_isblk.return_value = True
         with mock.patch('os.stat'):
-            eb = ExternalBackup(mock.MagicMock(action=Action.MOUNT,
-                                               device='/dev/unittest0'))
-            eb.run()
+            app = App(mock.MagicMock(action=Action.MOUNT,
+                                     device='/dev/unittest0'))
+            app.run()
         mock_call.assert_called_once_with(
             ['cryptsetup', 'luksOpen', '/dev/unittest0', MAPPER_NAME])
         mock_mount.assert_called_once_with(
@@ -77,10 +77,10 @@ class TestApp(object):
         mock_exists.side_effect = [True, False]
         mock_stat_isblk.return_value = False
         with mock.patch('os.stat'):
-            eb = ExternalBackup(mock.MagicMock(action=Action.MOUNT,
-                                               device='/dev/unittest0'))
+            app = App(mock.MagicMock(action=Action.MOUNT,
+                                     device='/dev/unittest0'))
             with pytest.raises(Exception):
-                eb.run()
+                app.run()
         mock_mount.assert_not_called()
         mock_call.assert_not_called()
 
@@ -89,9 +89,9 @@ class TestApp(object):
         mock_exists.side_effect = [True, True]
         mock_stat_isblk.return_value = True
         with mock.patch('os.stat'):
-            eb = ExternalBackup(mock.MagicMock(action=Action.MOUNT,
-                                               device='/dev/unittest0'))
-            eb.run()
+            app = App(mock.MagicMock(action=Action.MOUNT,
+                                     device='/dev/unittest0'))
+            app.run()
         mock_call.assert_not_called()
         mock_mount.assert_called_once_with(
             MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
@@ -100,8 +100,8 @@ class TestApp(object):
                      mock_call):
         mock_ismount.return_value = True
         mock_exists.return_value = True
-        eb = ExternalBackup(mock.MagicMock(action=Action.UNMOUNT))
-        eb.run()
+        app = App(mock.MagicMock(action=Action.UNMOUNT))
+        app.run()
         mock_unmount.assert_called_once_with(MOUNT_DIR)
         mock_call.assert_called_once_with(
             ['cryptsetup', 'luksClose', MAPPER_NAME])
@@ -110,8 +110,8 @@ class TestApp(object):
                                  mock_call):
         mock_ismount.return_value = False
         mock_exists.return_value = True
-        eb = ExternalBackup(mock.MagicMock(action=Action.UNMOUNT))
-        eb.run()
+        app = App(mock.MagicMock(action=Action.UNMOUNT))
+        app.run()
         mock_unmount.assert_not_called()
         mock_call.assert_called_once_with(
             ['cryptsetup', 'luksClose', MAPPER_NAME])
@@ -120,7 +120,7 @@ class TestApp(object):
                                            mock_unmount, mock_call):
         mock_ismount.return_value = False
         mock_exists.return_value = False
-        eb = ExternalBackup(mock.MagicMock(action=Action.UNMOUNT))
-        eb.run()
+        app = App(mock.MagicMock(action=Action.UNMOUNT))
+        app.run()
         mock_unmount.assert_not_called()
         mock_call.assert_not_called()
