@@ -12,6 +12,7 @@ from .mount import BindMounts
 from .rsync import RsyncPaths
 
 MOUNT_DIR = '/mnt/backup-offsite'
+TIMESTAMP_FORMAT = '%Y.%m.%d_%H:%M'
 
 
 class ExternalBackup(object):
@@ -59,7 +60,7 @@ class ExternalBackup(object):
         self._backup_mysql()
 
     def _backup_versioned(self, bind_dir):
-        versioned_dir = datetime.datetime.now().strftime('%Y.%m.%d_%H:%M')
+        versioned_dir = datetime.datetime.now().strftime(TIMESTAMP_FORMAT)
         target = os.path.join(self.target, versioned_dir)
         if os.path.isdir(target):
             raise Exception('{} already exists'.format(target))
