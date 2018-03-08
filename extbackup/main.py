@@ -22,12 +22,12 @@ class Action(enum.Enum):
 class App(object):
     def __init__(self, args):
         self.args = args
-        self.external_backup = ExternalBackup(pretend=args.pretend,
-                                              config_file=args.config_file)
 
     def run(self):
         if self.args.action == Action.BACKUP:
-            self.external_backup.backup()
+            eb = ExternalBackup(pretend=self.args.pretend,
+                                config_file=self.args.config_file)
+            eb.backup()
         if self.args.action == Action.MOUNT:
             self._mount()
         if self.args.action == Action.UNMOUNT:
