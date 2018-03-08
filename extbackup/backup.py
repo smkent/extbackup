@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 
+from .fstab import fstab_mount_points
 from .mount import Mount
 from .mount import BindMounts
 from .rsync import RsyncPaths
@@ -19,7 +20,7 @@ class ExternalBackup(object):
     def __init__(self, pretend=False, config_file=None):
         self.pretend = pretend
         self.config_file = config_file
-        self.mounts = ['/', '/boot', '/home']
+        self.mounts = fstab_mount_points()
         self.rsync = None
 
     @property
