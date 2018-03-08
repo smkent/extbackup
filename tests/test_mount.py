@@ -183,12 +183,17 @@ class TestHelpers(object):
 
 
 class TestMount(object):
-    def test_enter(self, mock_mount):
+    @pytest.mark.parametrize(['mount_return_value'], [
+        (True,),
+        (None,),
+    ])
+    def test_enter(self, mount_return_value, mock_mount):
+        mock_mount.return_value = mount_return_value
         with mock.patch.object(Mount, '__exit__',
                                mock.MagicMock(return_value=None)):
             mount = Mount(MOCK_MOUNT_POINT)
             with mount:
-                assert mount.should_unmount is True
+                assert mount.should_unmount is bool(mount_return_value)
             mock_mount.assert_called_once_with(target=MOCK_MOUNT_POINT)
 
     @pytest.mark.parametrize(['should_unmount'], [

@@ -50,8 +50,8 @@ class Mount(object):
         self.should_unmount = False
 
     def __enter__(self):
-        mount(target=self.mount_point)
-        self.should_unmount = True
+        if mount(target=self.mount_point):
+            self.should_unmount = True
 
     def __exit__(self, exc_type, value, traceback):
         if self.should_unmount:
