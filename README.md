@@ -113,8 +113,7 @@ mount /dev/mapper/backup-external /mnt/backup-external
 
 The backup is now available under `/mnt/backup-external`.
 
-To restore files, using `rsync -avHSAX /path/to/source /path/to/destination` to
-preserve all attributes and properties.
+To restore files, use `rsync -avHSAX` to preserve all attributes and properties.
 
 When finished, re-lock and unmount the backup disk:
 ```sh
