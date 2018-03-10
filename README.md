@@ -1,6 +1,11 @@
 # extbackup
 
-External backup disk creation utility
+External backup disk creation
+
+This is [smkent][smkent]'s personal backup creation utility. It is published for
+illustrative purposes only. I am not responsible for any damage or data loss.
+
+---
 
 Backups are created using `rsync` and stored on a partition encrypted using
 cryptsetup and LUKS.
@@ -9,6 +14,9 @@ Backup files can be versioned or stored as a single copy. Versioning is
 performed based on the backup creation time, hard-linking unchanged files using
 using `rsync`'s `--link-dest` option. Single copy backup is a good option for
 larger files for which older versions should not be retained.
+
+If MySQL is present on the system, a dump of all databases is performed and
+stored on the backup destination.
 
 ## Repository setup
 
@@ -112,3 +120,6 @@ cryptsetup luksClose backup
 ```sh
 make test
 ```
+
+
+[smkent]: https://github.com/smkent
