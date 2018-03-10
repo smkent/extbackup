@@ -39,6 +39,8 @@ class App(object):
     def _unmount(self):
         if os.path.ismount(MOUNT_DIR):
             unmount(MOUNT_DIR)
+            print('Removing {}'.format(MOUNT_DIR))
+            os.rmdir(MOUNT_DIR)
         if os.path.exists(self._mapper_path()):
             print('Closing {}'.format(self._mapper_path()))
             subprocess.check_call(['cryptsetup', 'luksClose', MAPPER_NAME])
@@ -54,6 +56,9 @@ class App(object):
             subprocess.check_call(['cryptsetup', 'luksOpen',
                                    self.args.device, MAPPER_NAME])
             print('Started {}'.format(self._mapper_path()))
+        if not os.path.isdir(MOUNT_DIR):
+            print('Creating {}'.format(MOUNT_DIR))
+            os.mkdir(MOUNT_DIR)
         mount(MOUNT_DIR, source=self._mapper_path())
 
 
