@@ -77,8 +77,9 @@ def mock_root():
 
 
 class TestApp(object):
-    def test_mount(self, mock_exists, mock_isdir, mock_stat_isblk,
-                   mock_mkdir, mock_mount, mock_call):
+    def test_mount(self, mock_exists, mock_isdir, mock_ismount,
+                   mock_stat_isblk, mock_mkdir, mock_mount, mock_call):
+        mock_ismount.return_value = False
         mock_isdir.return_value = False
         mock_exists.side_effect = [True, False]
         mock_stat_isblk.return_value = True
@@ -92,8 +93,11 @@ class TestApp(object):
         mock_mount.assert_called_once_with(
             MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
 
-    def test_mount_doesnt_exist(self, mock_exists, mock_stat_isblk, mock_mount,
+    def test_mount_doesnt_exist(self, mock_exists, mock_isdir, mock_ismount,
+                                mock_stat_isblk, mock_mkdir, mock_mount,
                                 mock_call):
+        mock_ismount.return_value = False
+        mock_isdir.return_value = False
         mock_exists.side_effect = [True, False]
         mock_stat_isblk.return_value = False
         with mock.patch('os.stat'):
@@ -101,12 +105,14 @@ class TestApp(object):
                                      device='/dev/unittest0'))
             with pytest.raises(Exception):
                 app.run()
+        mock_mkdir.assert_not_called()
         mock_mount.assert_not_called()
         mock_call.assert_not_called()
 
-    def test_mount_mapper_exists(self, mock_exists, mock_isdir,
+    def test_mount_mapper_exists(self, mock_exists, mock_isdir, mock_ismount,
                                  mock_stat_isblk, mock_mkdir, mock_mount,
                                  mock_call):
+        mock_ismount.return_value = False
         mock_isdir.return_value = False
         mock_exists.side_effect = [True, True]
         mock_stat_isblk.return_value = True

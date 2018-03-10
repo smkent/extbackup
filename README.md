@@ -16,35 +16,11 @@ This will create the `extbackup` executable in the `bin` subdirectory.
 
 ## Disk partition creation
 
-Create the encrypted partition:
-```sh
-cryptsetup -y --cipher aes-xts-plain64:sha512 --hash sha512 --key-size 512 luksFormat /dev/sdXX
-```
-
-Unlock the new encrypted partition (replace `/dev/device` with the disk
+Create an encrypted partition by running (replace `/dev/device` with the disk
 partition block device):
 
 ```sh
-cryptsetup luksOpen /dev/device backup-external
-```
-
-Format the new partition:
-
-```sh
-mkfs.ext4 /dev/mapper/backup-external
-```
-
-Optionally set the reserved block percentage to 0 to make the full partition size
-available:
-
-```sh
-tune2fs -m 0 /dev/mapper/backupexternal
-```
-
-Re-lock the encrypted partition:
-
-```sh
-cryptsetup luksClose backup-external
+extbackup -d /dev/device create
 ```
 
 ## Backup configuration
