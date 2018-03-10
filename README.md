@@ -20,6 +20,14 @@ stored on the backup destination.
 
 ## Repository setup
 
+First, install [pipenv][pipenv]:
+
+```sh
+pip install pipenv
+```
+
+Then, set up the repository:
+
 ```sh
 make
 ```
@@ -139,4 +147,5 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 See [`LICENSE`](/LICENSE) for the full license text.
 
 
+[pipenv]: https://docs.pipenv.org/
 [smkent]: https://github.com/smkent
