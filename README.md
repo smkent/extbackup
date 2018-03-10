@@ -3,8 +3,12 @@
 External backup disk creation utility
 
 Backups are created using `rsync` and stored on a partition encrypted using
-cryptsetup and LUKS. Backups are versioned based on the backup creation time,
-hard-linking unchanged files using `rsync`'s `--link-dest` option.
+cryptsetup and LUKS.
+
+Backup files can be versioned or stored as a single copy. Versioning is
+performed based on the backup creation time, hard-linking unchanged files using
+using `rsync`'s `--link-dest` option. Single copy backup is a good option for
+larger files for which older versions should not be retained.
 
 ## Repository setup
 
