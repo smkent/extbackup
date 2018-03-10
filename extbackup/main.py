@@ -10,7 +10,7 @@ from .backup import MOUNT_DIR
 from .mount import mount
 from .mount import unmount
 
-MAPPER_NAME = 'backup_offsite'
+MAPPER_NAME = 'backup-external'
 
 
 class Action(enum.Enum):

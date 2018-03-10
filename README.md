@@ -25,26 +25,26 @@ Unlock the new encrypted partition (replace `/dev/device` with the disk
 partition block device):
 
 ```sh
-cryptsetup luksOpen /dev/device backup
+cryptsetup luksOpen /dev/device backup-external
 ```
 
 Format the new partition:
 
 ```sh
-mkfs.ext4 /dev/mapper/backup
+mkfs.ext4 /dev/mapper/backup-external
 ```
 
 Optionally set the reserved block percentage to 0 to make the full partition size
 available:
 
 ```sh
-tune2fs -m 0 /dev/mapper/backup # Sets the reserved block percentage to 0, good
+tune2fs -m 0 /dev/mapper/backupexternal
 ```
 
 Re-lock the encrypted partition:
 
 ```sh
-cryptsetup luksClose backup
+cryptsetup luksClose backup-external
 ```
 
 ## Backup configuration
@@ -111,11 +111,11 @@ Recovery is a manual process.
 
 First, unlock and mount the backup disk:
 ```sh
-cryptsetup luksOpen /dev/device backup
-mount /dev/mapper/backup /mnt/backup-offsite
+cryptsetup luksOpen /dev/device backup-external
+mount /dev/mapper/backup-external /mnt/backup-external
 ```
 
-The backup is now available under `/mnt/backup-offsite`.
+The backup is now available under `/mnt/backup-external`.
 
 To restore files, using `rsync -avHSAX /path/to/source /path/to/destination` to
 preserve all attributes and properties.
