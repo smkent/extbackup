@@ -81,6 +81,12 @@ class ExternalBackup(object):
     def _backup_mysql(self):
         if self.pretend:
             return
+        try:
+            subprocess.check_call(['which', 'mysqldump'],
+                                  stderr=open(os.devnull, 'w'))
+        except subprocess.CalledProcessError:
+            print('mysqldump not found, skipping MySQL backup')
+            return
         with tempfile.TemporaryDirectory() as mysql_dir:
             backup_file = os.path.join(mysql_dir, 'mysqldump.sql')
             with open(backup_file, 'w') as f:
