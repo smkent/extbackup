@@ -1,7 +1,6 @@
 import argparse
 import enum
 import os
-import stat
 import subprocess
 import sys
 
@@ -48,8 +47,6 @@ class App(object):
             raise Exception('No device specified')
         if not os.path.exists(self.args.device):
             raise Exception('{} does not exist'.format(self.args.device))
-        if not stat.S_ISBLK(os.stat(self.args.device).st_mode):
-            raise Exception('{} is not a block device')
 
     def _create(self):
         if os.path.ismount(MOUNT_DIR):

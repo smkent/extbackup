@@ -45,12 +45,6 @@ def mock_ismount():
         yield patched_object
 
 
-@pytest.fixture
-def mock_stat_isblk():
-    with mock.patch('stat.S_ISBLK') as patched_object:
-        yield patched_object
-
-
 @pytest.fixture(autouse=True)
 def mock_call():
     with mock.patch('subprocess.check_call') as patched_object:
@@ -77,12 +71,11 @@ def mock_root():
 
 
 class TestApp(object):
-    def test_mount(self, mock_exists, mock_isdir, mock_ismount,
-                   mock_stat_isblk, mock_mkdir, mock_mount, mock_call):
+    def test_mount(self, mock_exists, mock_isdir, mock_ismount, mock_mkdir,
+                   mock_mount, mock_call):
         mock_ismount.return_value = False
         mock_isdir.return_value = False
         mock_exists.side_effect = [True, False]
-        mock_stat_isblk.return_value = True
         with mock.patch('os.stat'):
             app = App(mock.MagicMock(action=Action.MOUNT,
                                      device='/dev/unittest0'))
@@ -94,12 +87,10 @@ class TestApp(object):
             MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
 
     def test_mount_doesnt_exist(self, mock_exists, mock_isdir, mock_ismount,
-                                mock_stat_isblk, mock_mkdir, mock_mount,
-                                mock_call):
+                                mock_mkdir, mock_mount, mock_call):
         mock_ismount.return_value = False
         mock_isdir.return_value = False
-        mock_exists.side_effect = [True, False]
-        mock_stat_isblk.return_value = False
+        mock_exists.side_effect = [False, False]
         with mock.patch('os.stat'):
             app = App(mock.MagicMock(action=Action.MOUNT,
                                      device='/dev/unittest0'))
@@ -110,12 +101,10 @@ class TestApp(object):
         mock_call.assert_not_called()
 
     def test_mount_mapper_exists(self, mock_exists, mock_isdir, mock_ismount,
-                                 mock_stat_isblk, mock_mkdir, mock_mount,
-                                 mock_call):
+                                 mock_mkdir, mock_mount, mock_call):
         mock_ismount.return_value = False
         mock_isdir.return_value = False
         mock_exists.side_effect = [True, True]
-        mock_stat_isblk.return_value = True
         with mock.patch('os.stat'):
             app = App(mock.MagicMock(action=Action.MOUNT,
                                      device='/dev/unittest0'))
