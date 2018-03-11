@@ -2,10 +2,10 @@ import os
 
 
 def fstab_mount_points():
-    mount_points = ['/']
+    mount_points = {'/'}
     with open('/etc/fstab', 'r') as f:
         print('Loading fstab')
-        for line in f:
+        for line in f.readlines():
             if '#' in line:
                 line = line.split('#', 1)[0]
             line = line.strip()
@@ -16,5 +16,5 @@ def fstab_mount_points():
                 continue
             if os.path.isdir(mount_point):
                 print('Found mount point: {}'.format(mount_point))
-                mount_points.append(mount_point)
-    return mount_points
+                mount_points.add(mount_point)
+    return sorted(list(mount_points))
