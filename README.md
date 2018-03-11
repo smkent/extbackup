@@ -2,8 +2,9 @@
 
 External backup disk creation
 
-This is [smkent][smkent]'s personal backup creation utility. It is published for
-illustrative purposes only. I am not responsible for any damage or data loss.
+This is [smkent][smkent]'s personal Linux system backup creation utility. It is
+published for illustrative purposes only. I am not responsible for any damage or
+data loss.
 
 ---
 
