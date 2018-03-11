@@ -1,5 +1,8 @@
 # extbackup
 
+[![Build Status][travis-img]][travis]
+[![Coverage Status][coveralls-img]][coveralls]
+
 External backup disk creation
 
 This is [smkent][smkent]'s personal Linux system backup creation utility. It is
@@ -146,6 +149,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 See [`LICENSE`](/LICENSE) for the full license text.
 
-
+[coveralls]: https://coveralls.io/github/smkent/extbackup
+[coveralls-img]: https://coveralls.io/repos/github/smkent/extbackup/badge.svg
 [pipenv]: https://docs.pipenv.org/
 [smkent]: https://github.com/smkent
+[travis]: https://travis-ci.org/smkent/extbackup
+[travis-img]: https://travis-ci.org/smkent/extbackup.svg?branch=master
