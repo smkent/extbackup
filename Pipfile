@@ -8,7 +8,9 @@ pyyaml = "*"
 
 [dev-packages]
 flake8 = "*"
+isort = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-sugar = "*"
 python-coveralls = "*"
+vulture = "*"
