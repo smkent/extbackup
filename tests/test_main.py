@@ -70,82 +70,86 @@ def mock_root():
         yield mock_getuid
 
 
-class TestApp(object):
-    def test_mount(self, mock_exists, mock_isdir, mock_ismount, mock_mkdir,
-                   mock_mount, mock_call):
-        mock_ismount.return_value = False
-        mock_isdir.return_value = False
-        mock_exists.side_effect = [True, False]
-        with mock.patch('os.stat'):
-            app = App(mock.MagicMock(action=Action.MOUNT,
-                                     device='/dev/unittest0'))
+def test_mount(mock_exists, mock_isdir, mock_ismount, mock_mkdir,
+               mock_mount, mock_call):
+    mock_ismount.return_value = False
+    mock_isdir.return_value = False
+    mock_exists.side_effect = [True, False]
+    with mock.patch('os.stat'):
+        app = App(mock.MagicMock(action=Action.MOUNT,
+                                 device='/dev/unittest0'))
+        app.run()
+    mock_call.assert_called_once_with(
+        ['cryptsetup', 'luksOpen', '/dev/unittest0', MAPPER_NAME])
+    mock_mkdir.assert_called_once_with(MOUNT_DIR)
+    mock_mount.assert_called_once_with(
+        MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
+
+
+def test_mount_doesnt_exist(mock_exists, mock_isdir, mock_ismount,
+                            mock_mkdir, mock_mount, mock_call):
+    mock_ismount.return_value = False
+    mock_isdir.return_value = False
+    mock_exists.side_effect = [False, False]
+    with mock.patch('os.stat'):
+        app = App(mock.MagicMock(action=Action.MOUNT,
+                                 device='/dev/unittest0'))
+        with pytest.raises(Exception):
             app.run()
-        mock_call.assert_called_once_with(
-            ['cryptsetup', 'luksOpen', '/dev/unittest0', MAPPER_NAME])
-        mock_mkdir.assert_called_once_with(MOUNT_DIR)
-        mock_mount.assert_called_once_with(
-            MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
+    mock_mkdir.assert_not_called()
+    mock_mount.assert_not_called()
+    mock_call.assert_not_called()
 
-    def test_mount_doesnt_exist(self, mock_exists, mock_isdir, mock_ismount,
-                                mock_mkdir, mock_mount, mock_call):
-        mock_ismount.return_value = False
-        mock_isdir.return_value = False
-        mock_exists.side_effect = [False, False]
-        with mock.patch('os.stat'):
-            app = App(mock.MagicMock(action=Action.MOUNT,
-                                     device='/dev/unittest0'))
-            with pytest.raises(Exception):
-                app.run()
-        mock_mkdir.assert_not_called()
-        mock_mount.assert_not_called()
-        mock_call.assert_not_called()
 
-    def test_mount_mapper_exists(self, mock_exists, mock_isdir, mock_ismount,
-                                 mock_mkdir, mock_mount, mock_call):
-        mock_ismount.return_value = False
-        mock_isdir.return_value = False
-        mock_exists.side_effect = [True, True]
-        with mock.patch('os.stat'):
-            app = App(mock.MagicMock(action=Action.MOUNT,
-                                     device='/dev/unittest0'))
-            app.run()
-        mock_call.assert_not_called()
-        mock_mkdir.assert_called_once_with(MOUNT_DIR)
-        mock_mount.assert_called_once_with(
-            MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
-
-    def test_unmount(self, mock_isdir, mock_ismount, mock_exists, mock_unmount,
-                     mock_rmdir, mock_call):
-        mock_isdir.return_value = True
-        mock_ismount.return_value = True
-        mock_exists.return_value = True
-        app = App(mock.MagicMock(action=Action.UNMOUNT))
+def test_mount_mapper_exists(mock_exists, mock_isdir, mock_ismount,
+                             mock_mkdir, mock_mount, mock_call):
+    mock_ismount.return_value = False
+    mock_isdir.return_value = False
+    mock_exists.side_effect = [True, True]
+    with mock.patch('os.stat'):
+        app = App(mock.MagicMock(action=Action.MOUNT,
+                                 device='/dev/unittest0'))
         app.run()
-        mock_unmount.assert_called_once_with(MOUNT_DIR)
-        mock_rmdir.assert_called_once_with(MOUNT_DIR)
-        mock_call.assert_called_once_with(
-            ['cryptsetup', 'luksClose', MAPPER_NAME])
+    mock_call.assert_not_called()
+    mock_mkdir.assert_called_once_with(MOUNT_DIR)
+    mock_mount.assert_called_once_with(
+        MOUNT_DIR, source=os.path.join('/dev/mapper', MAPPER_NAME))
 
-    def test_unmount_not_mounted(self, mock_isdir, mock_ismount, mock_exists,
-                                 mock_unmount, mock_rmdir, mock_call):
-        mock_isdir.return_value = True
-        mock_ismount.return_value = False
-        mock_exists.return_value = True
-        app = App(mock.MagicMock(action=Action.UNMOUNT))
-        app.run()
-        mock_unmount.assert_not_called()
-        mock_rmdir.assert_not_called()
-        mock_call.assert_called_once_with(
-            ['cryptsetup', 'luksClose', MAPPER_NAME])
 
-    def test_unmount_not_mounted_no_mapper(self, mock_isdir, mock_ismount,
-                                           mock_exists, mock_unmount,
-                                           mock_rmdir, mock_call):
-        mock_isdir.return_value = True
-        mock_ismount.return_value = False
-        mock_exists.return_value = False
-        app = App(mock.MagicMock(action=Action.UNMOUNT))
-        app.run()
-        mock_unmount.assert_not_called()
-        mock_rmdir.assert_not_called()
-        mock_call.assert_not_called()
+def test_unmount(mock_isdir, mock_ismount, mock_exists, mock_unmount,
+                 mock_rmdir, mock_call):
+    mock_isdir.return_value = True
+    mock_ismount.return_value = True
+    mock_exists.return_value = True
+    app = App(mock.MagicMock(action=Action.UNMOUNT))
+    app.run()
+    mock_unmount.assert_called_once_with(MOUNT_DIR)
+    mock_rmdir.assert_called_once_with(MOUNT_DIR)
+    mock_call.assert_called_once_with(
+        ['cryptsetup', 'luksClose', MAPPER_NAME])
+
+
+def test_unmount_not_mounted(mock_isdir, mock_ismount, mock_exists,
+                             mock_unmount, mock_rmdir, mock_call):
+    mock_isdir.return_value = True
+    mock_ismount.return_value = False
+    mock_exists.return_value = True
+    app = App(mock.MagicMock(action=Action.UNMOUNT))
+    app.run()
+    mock_unmount.assert_not_called()
+    mock_rmdir.assert_not_called()
+    mock_call.assert_called_once_with(
+        ['cryptsetup', 'luksClose', MAPPER_NAME])
+
+
+def test_unmount_not_mounted_no_mapper(mock_isdir, mock_ismount,
+                                       mock_exists, mock_unmount,
+                                       mock_rmdir, mock_call):
+    mock_isdir.return_value = True
+    mock_ismount.return_value = False
+    mock_exists.return_value = False
+    app = App(mock.MagicMock(action=Action.UNMOUNT))
+    app.run()
+    mock_unmount.assert_not_called()
+    mock_rmdir.assert_not_called()
+    mock_call.assert_not_called()
