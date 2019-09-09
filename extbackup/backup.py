@@ -68,7 +68,8 @@ class ExternalBackup(object):
         self._runcmd(
             self._rsync_cmd(bind_dir, target,
                             link_dest=self._find_prev_version(),
-                            single=False))
+                            single=False),
+            ignore_exit_codes=[24])
         # Copy rsync configuration files to backup directory
         if not self.pretend:
             self.rsync.copy_config(os.path.join(target, 'rsync-config'))
@@ -76,7 +77,8 @@ class ExternalBackup(object):
     def _backup_single(self, bind_dir):
         self._runcmd(
             self._rsync_cmd(bind_dir, os.path.join(self.target, 'single'),
-                            single=True))
+                            single=True),
+            ignore_exit_codes=[24])
 
     def _backup_mysql(self):
         if self.pretend:
@@ -104,9 +106,14 @@ class ExternalBackup(object):
             if os.path.isdir(full_path):
                 return full_path
 
-    def _runcmd(self, cmd, stdout=None):
+    def _runcmd(self, cmd, stdout=None, ignore_exit_codes=None):
         print('+ {}'.format(' '.join(cmd)), file=sys.stderr)
-        subprocess.check_call(cmd, stdout=stdout)
+        try:
+            subprocess.check_call(cmd, stdout=stdout)
+        except subprocess.CalledProcessError as e:
+            if ignore_exit_codes and e.returncode in ignore_exit_codes:
+                return
+            raise
 
     def _rsync_cmd(self, source, dest, link_dest=None, single=False):
         rsync_cmd = [
