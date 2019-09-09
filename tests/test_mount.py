@@ -1,12 +1,12 @@
 import os
-
-import pytest
 import subprocess
 from unittest import mock
 
+import pytest
+
 import extbackup.mount
-from extbackup.mount import Mount
 from extbackup.mount import BindMounts
+from extbackup.mount import Mount
 
 MOCK_TEMP_DIR = '/tmp/tmp.unittest'
 MOCK_MOUNT_POINT = '/test-mount-point'

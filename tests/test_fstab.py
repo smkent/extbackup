@@ -1,7 +1,7 @@
 import os
+from unittest import mock
 
 import pytest
-from unittest import mock
 
 from extbackup.fstab import fstab_mount_points
 

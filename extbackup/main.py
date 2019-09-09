@@ -4,8 +4,8 @@ import os
 import subprocess
 import sys
 
-from .backup import ExternalBackup
 from .backup import MOUNT_DIR
+from .backup import ExternalBackup
 from .mount import mount
 from .mount import unmount
 

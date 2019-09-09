@@ -1,10 +1,10 @@
 import os
-
-import pytest
 from unittest import mock
 
-from extbackup.backup import ExternalBackup
+import pytest
+
 from extbackup.backup import MOUNT_DIR
+from extbackup.backup import ExternalBackup
 
 MOCK_HOSTNAME = 'testhost1'
 

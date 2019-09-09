@@ -1,12 +1,12 @@
 import os
-
-import pytest
 from unittest import mock
 
-from extbackup.main import Action
-from extbackup.main import App
+import pytest
+
 from extbackup.main import MAPPER_NAME
 from extbackup.main import MOUNT_DIR
+from extbackup.main import Action
+from extbackup.main import App
 
 MOCK_TEMP_DIR = '/tmp/tmp.unittest'
 MOCK_MOUNT_POINT = '/test-mount-point'

@@ -8,8 +8,8 @@ import sys
 import tempfile
 
 from .fstab import fstab_mount_points
-from .mount import Mount
 from .mount import BindMounts
+from .mount import Mount
 from .rsync import RsyncPaths
 
 MOUNT_DIR = '/mnt/backup-external'
