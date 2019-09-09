@@ -17,6 +17,6 @@ format: test-dependencies
 .PHONY: test
 test: test-dependencies
 	$(VENV_BIN)pytest
-	$(VENV_BIN))flake8 --exclude='./.*' -- .
-	$(VENV_BIN))isort -sl -rc --atomic --quiet --check-only -- tests/ kernel_tools/
-	$(VENV_BIN))vulture kernel_tools/
+	$(VENV_BIN)flake8 --exclude='./.*' -- .
+	$(VENV_BIN)isort -sl -rc --atomic --quiet --check-only -- tests/ kernel_tools/
+	$(VENV_BIN)vulture kernel_tools/
